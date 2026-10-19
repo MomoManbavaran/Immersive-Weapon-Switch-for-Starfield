@@ -8,7 +8,6 @@ namespace
     std::atomic<bool>     g_busy{ false };
     RE::TESForm* g_lastWeapon = nullptr;
 
-    // Game function.
     using EquipObject_t = bool (*)(RE::ActorEquipManager*, RE::Actor*, const RE::BGSObjectInstance&, const RE::BGSEquipSlot*, bool, bool, bool, bool, bool);
 
     EquipObject_t g_originalEquipObject = nullptr;
@@ -36,7 +35,6 @@ namespace
             return false;
         }
 
-        // Check.
         if (a_form->As<RE::TESObjectWEAP>()) 
         {
             return true;
@@ -96,7 +94,6 @@ namespace
     {
         // REX::INFO("Hard intercept: holster first");
 
-        // Old weapon is STILL the equipped one, don't unload the weapon mesh.
         RequestSheathe(pending.actor);
 
         std::thread([pending = std::move(pending)]() mutable 
@@ -157,14 +154,12 @@ namespace
             return callOriginal();
         }
 
-        // Duplicate call while player is already holstering = discard it.
         if (g_busy.load()) 
         {
             // REX::INFO("EquipObject swallowed (busy, delayed equip pending)");
             return true;
         }
 
-        // First weapon or same weapon = normal equip and update tracking.
         if (!g_lastWeapon || g_lastWeapon == form) {
             auto result = callOriginal();
             g_lastWeapon = form;
