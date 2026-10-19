@@ -8,44 +8,45 @@ namespace
     std::atomic<bool>     g_busy{ false };
     RE::TESForm* g_lastWeapon = nullptr;
 
-    // Game function
-    using EquipObject_t = bool (*)(
-        RE::ActorEquipManager*,
-        RE::Actor*,
-        const RE::BGSObjectInstance&,
-        const RE::BGSEquipSlot*,
-        bool, bool, bool, bool, bool);
+    // Game function.
+    using EquipObject_t = bool (*)(RE::ActorEquipManager*, RE::Actor*, const RE::BGSObjectInstance&, const RE::BGSEquipSlot*, bool, bool, bool, bool, bool);
 
     EquipObject_t g_originalEquipObject = nullptr;
 
     void RequestSheathe(RE::Actor* a_actor)
     {
-        if (a_actor) {
+        if (a_actor) 
+        {
             a_actor->DrawWeaponMagicHands(false);
         }
     }
 
     void RequestDraw(RE::Actor* a_actor)
     {
-        if (a_actor) {
+        if (a_actor) 
+        {
             a_actor->DrawWeaponMagicHands(true);
         }
     }
 
     bool IsWeaponForm(RE::TESForm* a_form)
     {
-        if (!a_form) {
+        if (!a_form) 
+        {
             return false;
         }
 
-        // Check
-        if (a_form->As<RE::TESObjectWEAP>()) {
+        // Check.
+        if (a_form->As<RE::TESObjectWEAP>()) 
+        {
             return true;
         }
 
-        // Fallback
-        if (auto* bound = a_form->As<RE::TESBoundObject>()) {
-            if (bound->IsWeapon()) {
+        // Fallback.
+        if (auto* bound = a_form->As<RE::TESBoundObject>()) 
+        {
+            if (bound->IsWeapon()) 
+            {
                 return true;
             }
         }
@@ -68,12 +69,13 @@ namespace
 
     void FinishPendingEquip(PendingEquip pending)
     {
-        if (!g_originalEquipObject || !pending.manager || !pending.actor) {
+        if (!g_originalEquipObject || !pending.manager || !pending.actor) 
+        {
             g_busy = false;
             return;
         }
 
-        REX::INFO("Holstering finished, applying delayed equip");
+        // REX::INFO("Holstering finished, applying delayed equip");
 
         g_originalEquipObject(
             pending.manager,
@@ -92,25 +94,30 @@ namespace
 
     void ScheduleHolsterThenEquip(PendingEquip pending)
     {
-        REX::INFO("Hard intercept: holster first");
+        // REX::INFO("Hard intercept: holster first");
 
-        // Old weapon is STILL the equipped one → mesh stays for this anim
+        // Old weapon is STILL the equipped one, don't unload the weapon mesh.
         RequestSheathe(pending.actor);
 
-        std::thread([pending = std::move(pending)]() mutable {
+        std::thread([pending = std::move(pending)]() mutable 
+        {
             std::this_thread::sleep_for(std::chrono::milliseconds(kSheatheDelayMs));
 
-            auto run = [pending = std::move(pending)]() mutable {
+            auto run = [pending = std::move(pending)]() mutable 
+            {
                 FinishPendingEquip(std::move(pending));
-                };
+            };
 
-            if (auto* tasks = SFSE::GetTaskInterface()) {
+            if (auto* tasks = SFSE::GetTaskInterface()) 
+            {
                 tasks->AddTask(std::move(run));
             }
-            else {
+            else 
+            {
                 run();
             }
-            }).detach();
+
+        }).detach();
     }
 
     bool hkEquipObject(
@@ -118,61 +125,69 @@ namespace
         RE::Actor* a_actor,
         const RE::BGSObjectInstance& a_object,
         const RE::BGSEquipSlot* a_slot,
-        bool                         a_queueEquip,
-        bool                         a_forceEquip,
-        bool                         a_playSounds,
-        bool                         a_applyNow,
-        bool                         a_locked)
+        bool a_queueEquip,
+        bool a_forceEquip,
+        bool a_playSounds,
+        bool a_applyNow,
+        bool a_locked)
     {
-        auto callOriginal = [&]() {
-            return g_originalEquipObject(
-                a_this, a_actor, a_object, a_slot,
-                a_queueEquip, a_forceEquip, a_playSounds, a_applyNow, a_locked);
-            };
+        auto callOriginal = [&]() 
+        {
+            return g_originalEquipObject(a_this, a_actor, a_object, a_slot, a_queueEquip, a_forceEquip, a_playSounds, a_applyNow, a_locked);
+        };
 
-        if (!a_actor || !a_actor->IsPlayerRef()) {
+        if (!a_actor || !a_actor->IsPlayerRef()) 
+        {
             return callOriginal();
         }
 
         RE::TESForm* form = a_object.object;
 
+        /*
         REX::INFO(
             "EquipObject player | form={} | weapon={} | last={} | busy={}",
             form && form->GetFormEditorID() ? form->GetFormEditorID() : "?",
             IsWeaponForm(form),
             g_lastWeapon && g_lastWeapon->GetFormEditorID() ? g_lastWeapon->GetFormEditorID() : "(none)",
             g_busy.load());
+        */
 
-        if (!IsWeaponForm(form)) {
+        if (!IsWeaponForm(form)) 
+        {
             return callOriginal();
         }
 
-        // Duplicate / re-entrant call while player is already holstering = swallow it
-        if (g_busy.load()) {
-            REX::INFO("EquipObject swallowed (busy, delayed equip pending)");
+        // Duplicate call while player is already holstering = discard it.
+        if (g_busy.load()) 
+        {
+            // REX::INFO("EquipObject swallowed (busy, delayed equip pending)");
             return true;
         }
 
-        // First weapon or same weapon = normal equip and update tracking
+        // First weapon or same weapon = normal equip and update tracking.
         if (!g_lastWeapon || g_lastWeapon == form) {
             auto result = callOriginal();
             g_lastWeapon = form;
             return result;
         }
 
-        // Different weapon = hard intercept
+        // Different weapon = hard intercept.
+        /*
         REX::INFO(
             "Intercept switch {} -> {}",
             g_lastWeapon->GetFormEditorID(),
             form->GetFormEditorID());
+        */
 
-        if (g_busy.exchange(true)) {
+        if (g_busy.exchange(true)) 
+        {
             auto result = callOriginal();
             g_lastWeapon = form;
             return result;
         }
 
-        PendingEquip pending{
+        PendingEquip pending
+        {
             a_this,
             a_actor,
             a_object,
@@ -184,12 +199,12 @@ namespace
             a_locked
         };
 
-        g_lastWeapon = form;  // Target weapon after delay
+        g_lastWeapon = form;  // Target weapon after delay.
         ScheduleHolsterThenEquip(std::move(pending));
-        return true;  // Block immediate equip
+        return true;  // Block immediate equip.
     }
 
-    // Keep last-weapon in sync for paths that aren't intercepted
+    // Keep last-weapon in sync for paths that aren't intercepted.
     class PlayerWeaponEquipSink :
         public RE::BSTEventSink<RE::ActorItemEquipped::Event>
     {
@@ -199,7 +214,8 @@ namespace
             RE::BSTEventSource<RE::ActorItemEquipped::Event>*) override
         {
             if (a_event.actor && a_event.actor->IsPlayerRef() &&
-                a_event.item && IsWeaponForm(a_event.item)) {
+                a_event.item && IsWeaponForm(a_event.item)) 
+            {
                 g_lastWeapon = a_event.item;
             }
             return RE::BSEventNotifyControl::kContinue;
@@ -210,7 +226,8 @@ namespace
 
     bool InstallEquipHook()
     {
-        if (MH_Initialize() != MH_OK) {
+        if (MH_Initialize() != MH_OK) 
+        {
             REX::INFO("MH_Initialize failed");
             return false;
         }
@@ -222,12 +239,14 @@ namespace
             reinterpret_cast<void*>(&hkEquipObject),
             reinterpret_cast<void**>(&g_originalEquipObject));
 
-        if (status != MH_OK) {
+        if (status != MH_OK) 
+        {
             REX::INFO("MH_CreateHook failed ({})", static_cast<int>(status));
             return false;
         }
 
-        if (MH_EnableHook(reinterpret_cast<void*>(target.address())) != MH_OK) {
+        if (MH_EnableHook(reinterpret_cast<void*>(target.address())) != MH_OK) 
+        {
             REX::INFO("MH_EnableHook failed");
             return false;
         }
@@ -238,19 +257,21 @@ namespace
 
     void OnDataLoaded()
     {
-        if (auto* src = RE::ActorItemEquipped::Event::GetEventSource()) {
+        if (auto* src = RE::ActorItemEquipped::Event::GetEventSource()) 
+        {
             src->RegisterSink(&g_equipSink);
             REX::INFO("Registered ActorItemEquipped sink");
         }
 
         if (!InstallEquipHook()) {
-            REX::INFO("Equip hook failed — mod will not intercept switches");
+            REX::INFO("Equip hook failed! Mod will not intercept switches");
         }
     }
 
     void MessageHandler(SFSE::MessagingInterface::Message* a_msg)
     {
-        if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) {
+        if (a_msg->type == SFSE::MessagingInterface::kPostDataLoad) 
+        {
             OnDataLoaded();
         }
     }
@@ -268,7 +289,8 @@ SFSE_PLUGIN_LOAD(const SFSE::LoadInterface* a_sfse)
     SFSE::Init(a_sfse);
     REX::INFO("ImmersiveWeaponSwitching Load");
 
-    if (auto* messaging = SFSE::GetMessagingInterface()) {
+    if (auto* messaging = SFSE::GetMessagingInterface()) 
+    {
         messaging->RegisterListener(MessageHandler);
     }
     return true;
